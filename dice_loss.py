@@ -28,6 +28,7 @@ if __name__ == '__main__':
     optimizer.zero_grad()
 
     pred=myModel(label)
+
     criterion=torch.nn.BCELoss()
     loss:torch.Tensor
     loss=binary_dice_loss(pred,label)+criterion(pred,label)
@@ -35,3 +36,10 @@ if __name__ == '__main__':
     optimizer.step()
 
     print('损失:',loss.item())
+
+    tmp_arr:torch.Tensor=pred.view(-1)
+    for x in tmp_arr:
+        if x <0 or x>1:
+            print('网络输出层越界')
+
+    print('数值0-1检查')
