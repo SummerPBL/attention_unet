@@ -66,13 +66,13 @@ def GetImFromNii(nii_impath:str, nii_segpath:str,output_dir:str)->None:
     Label_array[Label_array > 0.5] = WHITE_VALUE
 
     # 只有0 1 2三种取值
-    tmp_arr=Label_array[361,:,:]
-    tmp_arr=tmp_arr.flatten()
-    for x in tmp_arr:
-        if x!=0 and x!=WHITE_VALUE:
-            print('不止01!!!!!!!!!!!!!!!!!',x)
+    # tmp_arr=Label_array[361,:,:]
+    # tmp_arr=tmp_arr.flatten()
+    # for x in tmp_arr:
+    #     if x!=0 and x!=WHITE_VALUE:
+    #         print('不止01!!!!!!!!!!!!!!!!!',x)
             
-    print('01检查',tmp_arr.sum())
+    # print('01检查',tmp_arr.sum())
 
     THRESHOLD :float =0.1
         
@@ -91,3 +91,9 @@ def GetImFromNii(nii_impath:str, nii_segpath:str,output_dir:str)->None:
 
 if __name__ == '__main__':
     GetImFromNii('E:/3DUNet-Pytorch/raw_dataset/train/ct/volume-14.nii','E:/3DUNet-Pytorch/raw_dataset/train/label/segmentation-14.nii','./dataset')
+    
+    for i in range(40,131):
+        if (len(os.listdir('./dataset/val'))>=50*2):
+            break
+        GetImFromNii(f'E:/3DUNet-Pytorch/raw_dataset/train/ct/volume-{i}.nii',f'E:/3DUNet-Pytorch/raw_dataset/train/label/segmentation-{i}.nii','./dataset/val')
+    print('done')
