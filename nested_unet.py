@@ -176,6 +176,24 @@ class NestedUNet(nn.Module):
         x0_4:torch.Tensor
         x0_1,x0_2,x0_3,x0_4=self.decode(self.encode(x))
         return (x0_1,x0_2,x0_3,x0_4,)[level-1]
+    
+    def multi_predict(self, x:torch.Tensor)->Tuple[torch.Tensor]:
+        """
+        返回值: (x0_1,x0_2,x0_3,x0_4,)
+        """
+        x0_0:torch.Tensor
+        x1_0:torch.Tensor
+        x2_0:torch.Tensor
+        x3_0:torch.Tensor
+        x4_0:torch.Tensor
+        x0_0,x1_0,x2_0,x3_0,x4_0=self.encode(x)
+
+        x0_1:torch.Tensor
+        x0_2:torch.Tensor
+        x0_3:torch.Tensor
+        x0_4:torch.Tensor
+        x0_1,x0_2,x0_3,x0_4=self.decode(x0_0,x1_0,x2_0,x3_0,x4_0)
+        return (x0_1,x0_2,x0_3,x0_4,)
 
 if __name__ == '__main__':
     model=NestedUNet(1,1)
