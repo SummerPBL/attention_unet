@@ -32,11 +32,12 @@ class Zoom(nn.Module):
     """
     def __init__(self, num_chans:int) -> None:
         super().__init__()
-        self.convT=nn.ConvTranspose2d(num_chans,num_chans,kernel_size=4,stride=2,bias=False,padding=1)
-        self.convT.weight.data.copy_(bilinear_kernel(num_chans,num_chans,kernel_size=4))
+        self.Up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        # self.convT=nn.ConvTranspose2d(num_chans,num_chans,kernel_size=4,stride=2,bias=False,padding=1)
+        # self.convT.weight.data.copy_(bilinear_kernel(num_chans,num_chans,kernel_size=4))
     
     def forward(self, x:torch.Tensor)->torch.Tensor:
-        x=self.convT(x)
+        x=self.Up(x)
         return x
     
 # Nested Unet
