@@ -91,22 +91,18 @@ class NestedUNet(nn.Module):
 
         self.final1 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final2 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final3 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final4 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
 
@@ -125,7 +121,12 @@ class NestedUNet(nn.Module):
         return (x0_0,x1_0,x2_0,x3_0,x4_0,)
 
     def decode(self, x0_0:torch.Tensor,x1_0:torch.Tensor, \
-            x2_0:torch.Tensor, x3_0:torch.Tensor, x4_0:torch.Tensor)->Tuple[torch.Tensor]:
+            x2_0:torch.Tensor, x3_0:torch.Tensor, \
+            x4_0:torch.Tensor)->Tuple[torch.Tensor]:
+        """
+        数值0~1
+        return (x0_1,x0_2,x0_3,x0_4,)
+        """
         x0_1:torch.Tensor = self.conv0_1(torch.cat([x0_0, self.up0_1(x1_0)], dim=1))
 
         x1_1 = self.conv1_1(torch.cat([x1_0, self.up1_1(x2_0)], dim=1))
@@ -142,16 +143,16 @@ class NestedUNet(nn.Module):
 
         if __name__ == '__main__':
             print('Without activation:')
-            print('x(0,1):',x0_1.shape)
-            print('x(0,2):',x0_2.shape)
-            print('x(0,3):',x0_3.shape)
-            print('x(0,4):',x0_4.shape)
+            print('\tx(0,1):',x0_1.shape)
+            print('\tx(0,2):',x0_2.shape)
+            print('\tx(0,3):',x0_3.shape)
+            print('\tx(0,4):',x0_4.shape)
         
         return (self.final1(x0_1), self.final2(x0_2), self.final3(x0_3), self.final4(x0_4),)
     
     def multi_forward(self, x:torch.Tensor)->Tuple[torch.Tensor]:
         """
-        返回值: (x1_0,x2_0,x3_0,x4_0,output,)
+        返回值: (x1_0,x2_0,x3_0,x4_0,| x0_1,x0_2,x0_3,x0_4,)
         """
         x0_0:torch.Tensor
         x1_0:torch.Tensor
@@ -166,34 +167,15 @@ class NestedUNet(nn.Module):
         x0_4:torch.Tensor
         x0_1,x0_2,x0_3,x0_4=self.decode(x0_0,x1_0,x2_0,x3_0,x4_0)
 
-        output:torch.Tensor=(x0_1+x0_2+x0_3+x0_4)/4
-        return (x1_0,x2_0,x3_0,x4_0,output,)
+        return (x1_0,x2_0,x3_0,x4_0,x0_1,x0_2,x0_3,x0_4,)
 
-    def forward(self, x:torch.Tensor,level:int=4)->torch.Tensor:
-        x0_1:torch.Tensor
-        x0_2:torch.Tensor
-        x0_3:torch.Tensor
-        x0_4:torch.Tensor
-        x0_1,x0_2,x0_3,x0_4=self.decode(self.encode(x))
-        return (x0_1,x0_2,x0_3,x0_4,)[level-1]
     
     def multi_predict(self, x:torch.Tensor)->Tuple[torch.Tensor]:
         """
+        数值 0~1
         返回值: (x0_1,x0_2,x0_3,x0_4,)
         """
-        x0_0:torch.Tensor
-        x1_0:torch.Tensor
-        x2_0:torch.Tensor
-        x3_0:torch.Tensor
-        x4_0:torch.Tensor
-        x0_0,x1_0,x2_0,x3_0,x4_0=self.encode(x)
-
-        x0_1:torch.Tensor
-        x0_2:torch.Tensor
-        x0_3:torch.Tensor
-        x0_4:torch.Tensor
-        x0_1,x0_2,x0_3,x0_4=self.decode(x0_0,x1_0,x2_0,x3_0,x4_0)
-        return (x0_1,x0_2,x0_3,x0_4,)
+        return self.multi_forward(x)[4:]
 
 if __name__ == '__main__':
     model=NestedUNet(1,1)
@@ -201,21 +183,31 @@ if __name__ == '__main__':
     model.zero_grad()
 
     x=torch.randn(size=(2,1,256,256))
-    output:torch.Tensor
-    _,_,_,_,output =model.multi_forward(x)
+
+    x0_1:torch.Tensor
+    x0_2:torch.Tensor
+    x0_3:torch.Tensor
+    x0_4:torch.Tensor
+    x0_1,x0_2,x0_3,x0_4 =model.multi_predict(x)
     label:torch.Tensor = torch.randint(0,2,size=(2, 1,256,256,))
-    
 
     from dice_loss import binary_dice_loss
 
-    loss=binary_dice_loss(output,label)
+    outputs=(x0_1,x0_1,x0_3,x0_4,)
+
+    # loss=binary_dice_loss(output,label)
+    loss:torch.Tensor=0
+    for x in outputs:
+        loss+=binary_dice_loss(x,label)
+    print('calculated loss:',loss.item())
 
     print('No gradient yet:',model.conv1_1.conv1.weight.grad)
     loss.backward()
-    print('Calculated gradient:', model.conv1_1.conv1.weight.grad)
+    print('Calculated gradient:', model.conv1_1.conv1.weight.grad.shape,\
+         model.conv1_1.conv1.weight.grad)
 
-    print(output.type(),loss.item())
-    print(output.size(),output.dim())
+    print(x0_4.type(),loss.item())
+    print(x0_4.size(),x0_4.dim())
 
     def contain01(x:torch.Tensor)->bool:
         count1=(x>1).sum().item()
@@ -224,4 +216,4 @@ if __name__ == '__main__':
             return True
         else:
             return False
-    print('check01:',contain01(output))
+    print('check01:',contain01(x0_1),contain01(x0_2),contain01(x0_3),contain01(x0_4))

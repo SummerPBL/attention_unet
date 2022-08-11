@@ -20,7 +20,7 @@ WEIGHTS_SAVE_DIR:str='./weights_net++'
 if Path(WEIGHTS_SAVE_DIR).is_dir()==False:
     os.mkdir(WEIGHTS_SAVE_DIR)
 
-CONFIG_NUM_WORKERS = 0 if platform.system()=='Windows' else min(cpu_count()-2,0) 
+CONFIG_NUM_WORKERS = 0 if platform.system()=='Windows' else min(max(cpu_count()-2,0),10)
 
 BATCH_SIZE:np.int32=2
 
@@ -35,7 +35,7 @@ print('-----------------------------------')
 
 # neural networks
 model=nested_unet.NestedUNet(1,1,)
-ref_model = encoding_unetpp.NestedUNet(1,1,) #if USE_BOTTLE_NECK else None
+ref_model = encoding_unetpp.NestedUNet(1,1,) if USE_BOTTLE_NECK else None
 
 # loss functions
 bce_loss_func=torch.nn.BCELoss().to(CONFIG_DEVICE)
@@ -58,7 +58,7 @@ def train_iteration(model:nested_unet.NestedUNet, \
         optimizer:torch.optim.Adam, \
         raw_imgs:torch.Tensor,labels:torch.Tensor)->Tuple[float]:
     """
-    return (bce, dice,mse, total_loss,)
+    return float(bce, dice,mse, total_loss,)
     forward + backward + update on raw_imgs
     """
     if model.training == False:
@@ -66,11 +66,16 @@ def train_iteration(model:nested_unet.NestedUNet, \
 
     optimizer.zero_grad()
     # forward
-    output:torch.Tensor
-    x1_0,x2_0,x3_0,x4_0,output=model.multi_forward(raw_imgs)
+    x1_0,x2_0,x3_0,x4_0,x0_1,x0_2,x0_3,x0_4=model.multi_forward(raw_imgs)
 
-    bce:torch.Tensor=bce_loss_func(output,labels)
-    dice:torch.Tensor=binary_dice_loss(output,labels)
+    # calculate loss
+    outputs:Tuple[torch.Tensor]=(x0_1,x0_2,x0_3,x0_4,)
+    bce:torch.Tensor=0
+    dice:torch.Tensor=0
+    for prediction in outputs:
+        bce+=bce_loss_func(prediction,labels)
+        dice+=binary_dice_loss(prediction,labels)
+
     total_loss:torch.Tensor= bce+dice
 
     if ref_model!=None:
@@ -84,20 +89,23 @@ def train_iteration(model:nested_unet.NestedUNet, \
             +mse_loss_func(x4_0,ref_x4_0)
         total_loss+=mse
     else:
-        mse=torch.tensor([0,])
+        mse=torch.zeros(1)
 
     # backward & update
     total_loss.backward()
     optimizer.step()
 
-    return (bce.item(), dice.item(),mse.item(), total_loss.item(),)
+    return (bce.item(), dice.item(), mse.item(), total_loss.item(),)
 
 def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]:
+    """
+    return float(score1,2,3,4)
+    """
     if model.training==True:
         model.eval()
     
     score1,score2,score3,score4=0.0, 0.0, 0.0, 0.0
-    total_count=len(data_loader.dataset)
+    total_count:int=0
     print('<----validate /{}---->'.format(len(data_loader)))
     with torch.no_grad():
         for i,(raw_imgs,labels) in enumerate(data_loader):
@@ -122,12 +130,13 @@ def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]
             score2+=dice_grade2.item()*labels.size(0)
             score3+=dice_grade3.item()*labels.size(0)
             score4+=dice_grade4.item()*labels.size(0)
+            total_count+=labels.size(0)
 
             if DEBUG_MODE==True:
-                assert(dice_grade1.item()>0 and dice_grade1.item()<1)
-                assert(dice_grade2.item()>0 and dice_grade2.item()<1)
-                assert(dice_grade3.item()>0 and dice_grade3.item()<1)
-                assert(dice_grade4.item()>0 and dice_grade4.item()<1)
+                assert(dice_grade1.item()>=0 and dice_grade1.item()<=1)
+                assert(dice_grade2.item()>=0 and dice_grade2.item()<=1)
+                assert(dice_grade3.item()>=0 and dice_grade3.item()<=1)
+                assert(dice_grade4.item()>=0 and dice_grade4.item()<=1)
                 print('check reasonal dice score √')
                 break
     
@@ -145,9 +154,10 @@ if __name__=='__main__':
     
     print(type(optimizer))
     print(type(train_loader))
-    img_num=len(train_dataset)
+
     for epoch in range(20):
         bce_loss, dice_loss, mse_loss, total_loss=0.0, 0.0, 0.0, 0.0
+        total_count:int=0
         print('------epoch{}------'.format(epoch))
         print('<----train /{}---->'.format(len(train_loader)))
         for i,(raw_imgs,labels) in enumerate(train_loader):
@@ -159,16 +169,20 @@ if __name__=='__main__':
 
             bce, dice, mse, total= \
                 train_iteration(model,ref_model,optimizer,raw_imgs,labels)
-            bce_loss+=bce
-            dice_loss+=dice
-            mse_loss+=mse
-            total_loss+=total
+            
+            bce_loss+=bce*labels.size(0)
+            dice_loss+=dice*labels.size(0)
+            mse_loss+=mse*labels.size(0)
+            total_loss+=total*labels.size(0)
+            total_count+=labels.size(0)
             if i%100==0:
                 print('loss-- bce: {}, dice: {},mse: {}, total: {}'.format(bce,dice,mse, total))
             if(DEBUG_MODE==True):
                 break
         print()
-        print('-------train loss: {}, {}, {}, {},--------'.format(bce_loss/img_num,dice_loss/img_num,mse_loss/img_num,total_loss/img_num))
+        print('-------train loss: bce={}, dice={}, mse={}, total={},--------'\
+            .format(bce_loss/total_count,dice_loss/total_count, \
+                    mse_loss/total_count,total_loss/total_count))
         print('======eval======')
         dice_score1,dice_score2,dice_score3,dice_score4 \
             = validate(model,val_loader)
