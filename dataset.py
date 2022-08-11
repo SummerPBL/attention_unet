@@ -44,7 +44,7 @@ class liverDataset(Dataset):
         return len(self.pairs)
 
 if __name__ == '__main__':
-    myDataset=liverDataset('./dataset',None,None)
+    myDataset=liverDataset('./dataset/train',None,None)
 
     import torchvision
     t=torchvision.transforms.ToTensor()

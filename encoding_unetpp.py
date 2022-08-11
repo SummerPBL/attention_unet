@@ -32,13 +32,14 @@ class UpSampleSquash(nn.Module):
     """
     def __init__(self, num_chans:int) -> None:
         super().__init__()
-        self.convT=nn.ConvTranspose2d(num_chans,num_chans,kernel_size=4,stride=2,bias=False,padding=1)
-        self.convT.weight.data.copy_(bilinear_kernel(num_chans,num_chans,kernel_size=4))
+        # self.convT=nn.ConvTranspose2d(num_chans,num_chans,kernel_size=4,stride=2,bias=False,padding=1)
+        # self.convT.weight.data.copy_(bilinear_kernel(num_chans,num_chans,kernel_size=4))
+        self.Up=nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
         self.doubleConv=DoubleConv(num_chans,num_chans//2,num_chans//2)
     
     def forward(self, x:torch.Tensor)->torch.Tensor:
-        x=self.convT(x)
+        x=self.Up(x)
         x=self.doubleConv(x)
         return x
     
@@ -79,22 +80,18 @@ class NestedUNet(nn.Module):
 
         self.final1 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final2 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final3 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
         self.final4 = nn.Sequential(
             nn.Conv2d(FILTERS[0], out_ch, kernel_size=1),
-            nn.BatchNorm2d(out_ch),
             nn.Sigmoid(),
         )
 
@@ -138,7 +135,10 @@ class NestedUNet(nn.Module):
 
         return self.final1(x0_1), self.final2(x0_2), self.final3(x0_3), self.final4(x0_4)
 
-    def forward(self, x:torch.Tensor):
+    def forward(self, x:torch.Tensor)->Tuple[torch.Tensor]:
+        """
+        return (x0_1, x0_2, x0_3, x0_4,)
+        """
         x1_0:torch.Tensor
         x2_0:torch.Tensor
         x3_0:torch.Tensor
@@ -152,26 +152,34 @@ class NestedUNet(nn.Module):
         x0_4:torch.Tensor
         x0_1, x0_2, x0_3, x0_4=self.decode(x1_0,x2_0,x3_0,x4_0)
 
-        output:torch.Tensor = (x0_1+ x0_2+x0_3+x0_4)/4
-
-        return output
+        return (x0_1, x0_2, x0_3, x0_4,)
 
 if __name__ == '__main__':
     model=NestedUNet(1,1)
 
     x=torch.randn(size=(2,1,256,256))
-    output:torch.Tensor =model(x)
+
+    x0_1:torch.Tensor
+    x0_2:torch.Tensor
+    x0_3:torch.Tensor
+    x0_4:torch.Tensor
+    x0_1, x0_2, x0_3, x0_4 =model(x)
+
+
     label:torch.Tensor = torch.randint(0,2,size=(2, 1,256,256,))
     
 
     from dice_loss import binary_dice_loss
 
-    loss=binary_dice_loss(output,label)
+    loss= binary_dice_loss(x0_1,label) \
+        + binary_dice_loss(x0_2,label) \
+        + binary_dice_loss(x0_3,label) \
+        + binary_dice_loss(x0_4,label)
 
     loss.backward()
 
-    print(output.type(),loss.item())
-    print(output.size(),output.dim())
+    print('loss=',loss.item())
+    print('prediction shape',x0_4.dim())
 
     def contain01(x:torch.Tensor)->bool:
         count1=(x>1).sum().item()
@@ -181,4 +189,4 @@ if __name__ == '__main__':
         else:
             return False
     
-    print('check01',contain01(output))
+    print('check01',contain01(x0_1),contain01(x0_2),contain01(x0_3),contain01(x0_4),)
