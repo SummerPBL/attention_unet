@@ -1,6 +1,8 @@
-from typing import Tuple,Optional
+from typing import List, Tuple,Optional
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
+import time
 
 from dataset import liverDataset
 import nested_unet
@@ -11,10 +13,13 @@ import os
 import platform
 from pathlib import Path
 from multiprocessing import cpu_count
+import toolkit
 
 
 # configuration
 CONFIG_DEVICE:torch.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+ENCODER_LOAD_PATH='./trained_encoder/encoder_18_level4_9798.pth'
 
 WEIGHTS_SAVE_DIR:str='./weights_net++'
 if Path(WEIGHTS_SAVE_DIR).is_dir()==False:
@@ -24,7 +29,7 @@ CONFIG_NUM_WORKERS = 0 if platform.system()=='Windows' else min(max(cpu_count()-
 
 BATCH_SIZE:np.int32=2
 
-USE_BOTTLE_NECK=False
+USE_BOTTLE_NECK=True
 
 DEBUG_MODE:bool=True
 
@@ -33,9 +38,20 @@ print('Device:',CONFIG_DEVICE)
 print('Workers number:',CONFIG_NUM_WORKERS)
 print('-----------------------------------')
 
+# Plotting
+LOG_DIR='./log_bottleneck'
+SAMPLE_NUM_EPOCH = 3
+
 # neural networks
 model=nested_unet.NestedUNet(1,1,)
 ref_model = encoding_unetpp.NestedUNet(1,1,) if USE_BOTTLE_NECK else None
+if ref_model is not None:
+    ref_model.load_state_dict(\
+        torch.load(ENCODER_LOAD_PATH, map_location='cpu'))
+    ref_model.to(CONFIG_DEVICE)
+    ref_model.eval()
+    print('reference encoder loads successfully √')
+
 
 # loss functions
 bce_loss_func=torch.nn.BCELoss().to(CONFIG_DEVICE)
@@ -58,7 +74,7 @@ def train_iteration(model:nested_unet.NestedUNet, \
         optimizer:torch.optim.Adam, \
         raw_imgs:torch.Tensor,labels:torch.Tensor)->Tuple[float]:
     """
-    return float(bce, dice,mse, total_loss,)
+    return float(bce, dice, mse, total_loss,)
     forward + backward + update on raw_imgs
     """
     if model.training == False:
@@ -95,7 +111,7 @@ def train_iteration(model:nested_unet.NestedUNet, \
     total_loss.backward()
     optimizer.step()
 
-    return (bce.item(), dice.item(), mse.item(), total_loss.item(),)
+    return (bce.item()/4, dice.item()/4, mse.item()/4, total_loss.item()/4,)
 
 def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]:
     """
@@ -108,9 +124,7 @@ def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]
     total_count:int=0
     print('<----validate /{}---->'.format(len(data_loader)))
     with torch.no_grad():
-        for i,(raw_imgs,labels) in enumerate(data_loader):
-            print(i,end=' ')
-            
+        for i,(raw_imgs,labels) in enumerate(data_loader):            
             raw_imgs:torch.Tensor
             labels:torch.Tensor
             raw_imgs, labels=raw_imgs.to(CONFIG_DEVICE),labels.to(CONFIG_DEVICE)
@@ -140,29 +154,38 @@ def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]
                 print('check reasonal dice score √')
                 break
     
-    print()
     return score1/total_count,score2/total_count,score3/total_count,score4/total_count,
 
             
 if __name__=='__main__':
     model=model.to(CONFIG_DEVICE)
     model.train()
-
-    if USE_BOTTLE_NECK:
-        ref_model=ref_model.to(CONFIG_DEVICE)
-        ref_model.eval()
     
     print(type(optimizer))
     print(type(train_loader))
 
-    for epoch in range(20):
+    modulus:int=int(len(train_loader)/SAMPLE_NUM_EPOCH)
+
+    # Statistics
+    bce_loss_batches:List[float]=[]
+    dice_loss_batches:List[float]=[]
+    mse_loss_batches:List[float]=[]
+
+    bce_loss_epochs:List[float]=[]
+    dice_loss_epochs:List[float]=[]
+    mse_loss_epochs:List[float]=[]
+
+    dice_score_epochs:List[List[float]] =[]
+    
+
+    for epoch in range(30):
+        if epoch>=20:
+            ref_model=None
         bce_loss, dice_loss, mse_loss, total_loss=0.0, 0.0, 0.0, 0.0
         total_count:int=0
         print('------epoch{}------'.format(epoch))
-        print('<----train /{}---->'.format(len(train_loader)))
+        print('<======Train, total batches: {}======>'.format(len(train_loader)))
         for i,(raw_imgs,labels) in enumerate(train_loader):
-            print(i,end=' ')
-
             raw_imgs:torch.Tensor
             labels:torch.Tensor
             raw_imgs,labels = raw_imgs.to(CONFIG_DEVICE),labels.to(CONFIG_DEVICE)
@@ -175,24 +198,58 @@ if __name__=='__main__':
             mse_loss+=mse*labels.size(0)
             total_loss+=total*labels.size(0)
             total_count+=labels.size(0)
-            if i%100==0:
-                print('loss-- bce: {}, dice: {},mse: {}, total: {}'.format(bce,dice,mse, total))
+            if i%modulus==0:
+                print('\tProgress: {}/{}| loss: bce={}, dice={},mse={}, total={}' \
+                    .format(i,len(train_loader), bce,dice,mse, total))
+                bce_loss_batches.append(bce)
+                dice_loss_batches.append(dice)
+                mse_loss_batches.append(mse)
             if(DEBUG_MODE==True):
                 break
         print()
-        print('-------train loss: bce={}, dice={}, mse={}, total={},--------'\
+        print('-------Train done, loss: bce={}, dice={}, mse={}, total={},--------'\
             .format(bce_loss/total_count,dice_loss/total_count, \
                     mse_loss/total_count,total_loss/total_count))
-        print('======eval======')
+        bce_loss_epochs.append(bce_loss/total_count)
+        dice_loss_batches.append(dice_loss/total_count)
+        mse_loss_batches.append(mse_loss/total_count)
+        print('<======eval======>')
         dice_score1,dice_score2,dice_score3,dice_score4 \
             = validate(model,val_loader)
         dice_arr=(dice_score1,dice_score2,dice_score3,dice_score4,)
+        dice_score_epochs.append(dice_arr)
         print('dice score(1~4): ',dice_arr)
         best_level=np.argmax(dice_arr)
 
-        torch.save(model.state_dict(),os.path.join(WEIGHTS_SAVE_DIR,'unet++_{}_level{}_{:d}.pth'.format(epoch,best_level+1,int(dice_arr[best_level]*10000))))
+        torch.save(model.state_dict(),os.path.join(WEIGHTS_SAVE_DIR,'unet++_{}_level{}_{:04d}.pth'.format(epoch,best_level+1,int(dice_arr[best_level]*10000))))
 
         if DEBUG_MODE==True:
             break
         
+    """
+    Plot the statistics
+    """
+    dice_score_epochs_:np.ndarray=np.array(dice_score_epochs)
+    dice_score_epochs_=dice_score_epochs_.T
+    assert(dice_score_epochs_.shape[0]==4)
 
+    log_dir:str=time.strftime('%m-%d+%H-%M-%S', time.localtime(time.time()))
+    log_dir=LOG_DIR+ log_dir
+    print('statistics:',log_dir)
+
+    main_writer=SummaryWriter(log_dir)
+
+    toolkit.plot('train loss on batch',main_writer,bce_loss_batches)
+    toolkit.plot('train loss on batch',main_writer,dice_loss_batches)
+    toolkit.plot('train loss on batch',main_writer,mse_loss_batches)
+
+    toolkit.plot('train loss on epoch',main_writer,bce_loss_epochs)
+    toolkit.plot('train loss on epoch',main_writer,dice_loss_epochs)
+    toolkit.plot('train loss on epoch',main_writer,mse_loss_epochs)
+
+
+    for arr in dice_score_epochs_:
+        toolkit.plot('dice score on epoch',main_writer,arr)
+
+
+    main_writer.close()
