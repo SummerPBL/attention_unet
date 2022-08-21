@@ -1,7 +1,7 @@
 from typing import List, Tuple,Optional
 import torch
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
+# from torch.utils.tensorboard.writer import SummaryWriter
 import time
 
 from dataset import liverDataset
@@ -21,7 +21,9 @@ CONFIG_DEVICE:torch.device=torch.device('cuda' if torch.cuda.is_available() else
 
 ENCODER_LOAD_PATH='./trained_encoder/encoder_18_level4_9798.pth'
 
+suffix:str=time.strftime('%m-%d+%H-%M-%S', time.localtime(time.time()))
 WEIGHTS_SAVE_DIR:str='./weights_net++'
+WEIGHTS_SAVE_DIR+=suffix
 if Path(WEIGHTS_SAVE_DIR).is_dir()==False:
     os.mkdir(WEIGHTS_SAVE_DIR)
 
@@ -29,7 +31,7 @@ CONFIG_NUM_WORKERS = 0 if platform.system()=='Windows' else min(max(cpu_count()-
 
 BATCH_SIZE:np.int32=2
 
-USE_BOTTLE_NECK=True
+USE_BOTTLE_NECK=False
 
 DEBUG_MODE:bool=True
 
@@ -39,7 +41,12 @@ print('Workers number:',CONFIG_NUM_WORKERS)
 print('-----------------------------------')
 
 # Plotting
-LOG_DIR='./log_bottleneck'
+LOG_DIR='./log_common'
+
+LOG_DIR+=suffix
+if Path(LOG_DIR).is_dir()==False:
+    os.mkdir(LOG_DIR)
+print('statistics:',LOG_DIR)
 SAMPLE_NUM_EPOCH = 3
 
 # neural networks
@@ -164,7 +171,7 @@ if __name__=='__main__':
     print(type(optimizer))
     print(type(train_loader))
 
-    modulus:int=int(len(train_loader)/SAMPLE_NUM_EPOCH)
+    modulus:int=int(np.ceil(len(train_loader)/SAMPLE_NUM_EPOCH))
 
     # Statistics
     bce_loss_batches:List[float]=[]
@@ -178,7 +185,7 @@ if __name__=='__main__':
     dice_score_epochs:List[List[float]] =[]
     
 
-    for epoch in range(30):
+    for epoch in range(20):
         if epoch>=20:
             ref_model=None
         bce_loss, dice_loss, mse_loss, total_loss=0.0, 0.0, 0.0, 0.0
@@ -211,8 +218,8 @@ if __name__=='__main__':
             .format(bce_loss/total_count,dice_loss/total_count, \
                     mse_loss/total_count,total_loss/total_count))
         bce_loss_epochs.append(bce_loss/total_count)
-        dice_loss_batches.append(dice_loss/total_count)
-        mse_loss_batches.append(mse_loss/total_count)
+        dice_loss_epochs.append(dice_loss/total_count)
+        mse_loss_epochs.append(mse_loss/total_count)
         print('<======eval======>')
         dice_score1,dice_score2,dice_score3,dice_score4 \
             = validate(model,val_loader)
@@ -233,23 +240,8 @@ if __name__=='__main__':
     dice_score_epochs_=dice_score_epochs_.T
     assert(dice_score_epochs_.shape[0]==4)
 
-    log_dir:str=time.strftime('%m-%d+%H-%M-%S', time.localtime(time.time()))
-    log_dir=LOG_DIR+ log_dir
-    print('statistics:',log_dir)
-
-    main_writer=SummaryWriter(log_dir)
-
-    toolkit.plot('train loss on batch',main_writer,bce_loss_batches)
-    toolkit.plot('train loss on batch',main_writer,dice_loss_batches)
-    toolkit.plot('train loss on batch',main_writer,mse_loss_batches)
-
-    toolkit.plot('train loss on epoch',main_writer,bce_loss_epochs)
-    toolkit.plot('train loss on epoch',main_writer,dice_loss_epochs)
-    toolkit.plot('train loss on epoch',main_writer,mse_loss_epochs)
-
-
-    for arr in dice_score_epochs_:
-        toolkit.plot('dice score on epoch',main_writer,arr)
-
-
-    main_writer.close()
+    if USE_BOTTLE_NECK==False:
+        mse_loss_batches=None
+        mse_loss_epochs=None
+    
+    toolkit.log_statistics(LOG_DIR,SAMPLE_NUM_EPOCH,dice_loss_batches,bce_loss_batches,mse_loss_batches,dice_loss_epochs,bce_loss_epochs,mse_loss_epochs,dice_score_epochs_)
