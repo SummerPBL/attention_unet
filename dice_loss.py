@@ -12,6 +12,26 @@ def binary_dice_coeff(pred:torch.Tensor, label:torch.Tensor)->torch.Tensor:
 def binary_dice_loss(pred:torch.Tensor, label:torch.Tensor)->torch.Tensor:
     return 1-binary_dice_coeff(pred,label)
 
+def binary_focal_loss(pred:torch.Tensor, label:torch.Tensor, gamma:float=2)->torch.Tensor:
+    assert(pred.size()==label.size())
+    total:torch.Tensor=(0-label)*((1-pred)**gamma)*torch.log(pred)\
+        -(1-label)*(pred**gamma)*torch.log(pred)
+    weight:torch.Tensor=(1-label)*(pred**gamma)+label*((1-pred)**gamma)
+    return total.sum()/weight.sum()
+
+def weightedBCE(pred:torch.Tensor, label:torch.Tensor,\
+    target_weight:float=0.5):
+    assert(pred.size()==label.size())
+    assert(target_weight<1)
+    total:torch.Tensor=0-label*target_weight*torch.log(0.0001+pred)\
+        -(1-label)*(1-target_weight)*torch.log(1.0001-pred)
+    total=total.sum()
+
+    count1=label.sum()
+    count0=label.numel()-count1
+    total_weight:torch.Tensor=count0*(1-target_weight)+count1*target_weight
+    return total/total_weight
+
 if __name__ == '__main__':
     import attention_unet
     myModel=attention_unet.attention_Unet(1,1)
