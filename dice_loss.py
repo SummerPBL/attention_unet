@@ -1,16 +1,23 @@
 import torch
 
 # label中数值应为0或1,pred中数值应在0~1之间
-def binary_dice_coeff(pred:torch.Tensor, label:torch.Tensor)->torch.Tensor:
+def binary_dice_coeff(pred:torch.Tensor, label:torch.Tensor,eval_mode:bool=False)->torch.Tensor:
     assert(pred.shape==label.shape)
 
     joint=(pred*label).sum()
     pred_size=pred.sum()
     label_size=label.sum()
-    return 2*joint/(pred_size+label_size)
+    demoninator:int=pred_size+label_size
+    if eval_mode==True:
+        if(demoninator==0):
+            return torch.ones(1)
+        else:
+            return (2*joint)/demoninator
+    else:
+        return (2*joint+0.0001)/(demoninator+0.0001)
 
-def binary_dice_loss(pred:torch.Tensor, label:torch.Tensor)->torch.Tensor:
-    return 1-binary_dice_coeff(pred,label)
+def binary_dice_loss(pred:torch.Tensor, label:torch.Tensor,eval_mode:bool=False)->torch.Tensor:
+    return 1-binary_dice_coeff(pred,label,eval_mode)
 
 def binary_focal_loss(pred:torch.Tensor, label:torch.Tensor, gamma:float=2)->torch.Tensor:
     assert(pred.size()==label.size())

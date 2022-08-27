@@ -1,9 +1,10 @@
-from logging import exception
+from typing import Tuple,Optional
 import SimpleITK as sitk
 from PIL import Image
 
 
 import numpy as np
+import cv2
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,6 +27,89 @@ def containOnly012(raw_arr:np.ndarray):
         if x!=0 and x!=1 and x!=2:
             return False
     return True
+
+def calculate_frame(raw_arr:np.ndarray)->Tuple[int]:
+    """
+    return (up,down,left,right)
+    """
+    assert(len(raw_arr.shape)==2)
+    max_down=raw_arr.shape[0]-1
+
+    up=0
+    for up in range(0,max_down+1):
+        if(np.any(raw_arr[up])==True):
+            break
+    
+    down=max_down
+    for down in reversed(range(0,max_down+1)):
+        if(np.any(raw_arr[down])==True):
+            break
+
+    raw_arr_T=raw_arr.T
+    max_down=raw_arr_T.shape[0]-1
+    left=0
+    for left in range(0,max_down+1):
+        if(np.any(raw_arr_T[left])==True):
+            break
+    
+    right=max_down
+    for right in reversed(range(0,max_down+1)):
+        if(np.any(raw_arr_T[right])==True):
+            break
+
+    return (up,down,left,right,)
+
+def center_square_zoom(raw_img:np.ndarray,edge_len:int)->np.ndarray:
+    """
+    将任意形状的图片raw_img, 置于正方形中央并放大; 
+    
+    edge_len:正方形边长
+    """
+    assert(len(raw_img.shape)==2)
+    side_len=max(raw_img.shape[0],raw_img.shape[1])
+    board:np.ndarray=np.zeros(shape=(side_len,side_len,))
+    up=(side_len-raw_img.shape[0])//2
+    left=(side_len-raw_img.shape[1])//2
+    # print('中心扩充',raw_img.shape,board.shape,up,left)
+    board[up:up+raw_img.shape[0],left:left+raw_img.shape[1]]=raw_img
+    
+    PADDING=10
+    board=cv2.resize(board,(edge_len-2*PADDING,edge_len-2*PADDING,))
+
+    final=np.zeros(shape=(edge_len,edge_len,))
+    final[PADDING:PADDING+board.shape[0],\
+        PADDING:PADDING+board.shape[1]]=board
+    return final
+
+
+def crop_square_zoom(raw_img:np.ndarray,side_len:int,\
+    label_img:Optional[np.ndarray]=None)->Tuple[np.ndarray]:
+    """
+    论文中的：放大、居中预处理
+    返回2张图片
+    """
+    assert(len(raw_img.shape)==2)
+
+    up,down,left,right=calculate_frame(raw_img)
+
+    print(up,down,left,right)
+    
+    region_of_interest:np.ndarray=raw_img[up:down+1,left:right+1]
+    # print(region_of_interest.shape)
+
+    trimmed_img=center_square_zoom(region_of_interest,side_len,)
+    print('预处理后图片大小:',trimmed_img.shape)
+
+    if label_img is None:
+        return trimmed_img
+    
+    region_of_interest=label_img[up:down+1,left:right+1]
+    trimmed_label=center_square_zoom(region_of_interest,side_len,)
+    # label取值应当只有0,1
+    trimmed_label[trimmed_label<0.5]=0
+    trimmed_label[trimmed_label>=0.5]=1
+    return (trimmed_img,trimmed_label,)
+
 
 def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
     NII_ID:int
@@ -81,30 +165,55 @@ def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
             continue
         # print('某张2D:',label_select.shape) 256x256
 
-        # label: 只有肿瘤和背景
+        # label_arr: 肝脏背景
+        # original_label: 肝脏 肿瘤 背景
+        # tumor_label: 肿瘤 背景
         tumor_label=origin_label[i]
         tumor_label[tumor_label<1.5]=0
         tumor_label[tumor_label>=1.5]=1
-        label_pic = Image.fromarray(tumor_label*WHITE_VALUE).convert('1')
-        label_savepath=os.path.join(output_dir,'{}_{}_mask.png'.format(NII_ID,i))
-        label_pic.save(label_savepath)
+
+
         # img: 肝脏之外的部分为0
-        raw_pic=Image.fromarray(CT_array[i]*label_select).convert('L')
+        # raw_pic=Image.fromarray(CT_array[i]*label_select).convert('L')
+        # raw_pic=crop_square_zoom(CT_array[i]*label_select,256).convert('L')
+        
+        raw_arr:np.ndarray
+        label_arr:np.ndarray
+        raw_arr,label_arr=crop_square_zoom(CT_array[i]*label_select,256,tumor_label)
+        label_arr*=WHITE_VALUE
+        
+        print('Image数据结构:',raw_arr.shape,label_arr.shape)
+        if (label_arr.sum()>tumor_label.sum()):
+            print('label也扩大了')
+        elif(tumor_label.sum()==0):
+            print('label不含肿瘤')
+        else:
+            exit(-1)
+
         raw_savepath=os.path.join(output_dir,'{}_{}.png'.format(NII_ID,i))
+        raw_pic=Image.fromarray(raw_arr).convert('L')
+        print('---图像另存为---',raw_pic)
         raw_pic.save(raw_savepath)
+        
+        label_savepath=os.path.join(output_dir,'{}_{}_mask.png'.format(NII_ID,i))
+        label_pic=Image.fromarray(label_arr).convert('1')
+        label_pic.save(label_savepath)
+        
+
 
 if __name__ == '__main__':
-    # GetImFromNII('D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/ct/volume-14.nii',\
+    # GetImFromNII(\
+    #     'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/ct/volume-14.nii',\
     #     'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/label/segmentation-14.nii',\
-    #     './tumor_dataset')
+    #     './tmp_dataset')
     
     for i in range(47,131):
-        if(len(os.listdir('./tumor_dataset/val'))>=50*2):
+        if(len(os.listdir('./tumor_dataset/train'))>=500*2):
             break
         GetImFromNII(\
             f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/ct/volume-{i}.nii',\
             f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/label/segmentation-{i}.nii',\
-            './tumor_dataset/val')
+            './tumor_dataset/train')
     
     print('done')
 

@@ -1,6 +1,4 @@
 import csv
-from importlib.resources import path
-from ntpath import join
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
 from typing import List,Optional
@@ -8,6 +6,14 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import numpy as np
 import os
+
+def remove_outer_noise(raw_img:torch.Tensor,raw_pred:torch.Tensor)->torch.Tensor:
+    """
+    根据raw_img的0值，去除raw_pred的噪音
+    """
+    assert(raw_img.shape==raw_pred.shape)
+    trimmed=torch.where(raw_img==0,raw_img,raw_pred)
+    return trimmed
 
 def bilinear_kernel(in_channels, out_channels, kernel_size):
     factor = (kernel_size + 1) // 2

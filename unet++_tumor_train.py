@@ -147,11 +147,19 @@ def validate(model:nested_unet.NestedUNet, data_loader:DataLoader)->Tuple[float]
             x0_3:torch.Tensor
             x0_4:torch.Tensor
             x0_1,x0_2,x0_3,x0_4=model.multi_predict(raw_imgs)
+            x0_1.round_()
+            x0_2.round_()
+            x0_3.round_()
+            x0_4.round_()
+            x0_1=toolkit.remove_outer_noise(raw_imgs,x0_1)
+            x0_2=toolkit.remove_outer_noise(raw_imgs,x0_2)
+            x0_3=toolkit.remove_outer_noise(raw_imgs,x0_3)
+            x0_4=toolkit.remove_outer_noise(raw_imgs,x0_4)
 
-            dice_grade1=binary_dice_coeff(x0_1,labels)
-            dice_grade2=binary_dice_coeff(x0_2,labels)
-            dice_grade3=binary_dice_coeff(x0_3,labels)
-            dice_grade4=binary_dice_coeff(x0_4,labels)
+            dice_grade1=binary_dice_coeff(x0_1,labels,True)
+            dice_grade2=binary_dice_coeff(x0_2,labels,True)
+            dice_grade3=binary_dice_coeff(x0_3,labels,True)
+            dice_grade4=binary_dice_coeff(x0_4,labels,True)
 
             score1+=dice_grade1.item()*labels.size(0)
             score2+=dice_grade2.item()*labels.size(0)
@@ -254,3 +262,7 @@ if __name__=='__main__':
         dice_loss_batches,bce_loss_batches,\
         mse_loss_batches,dice_loss_epochs,\
         bce_loss_epochs,mse_loss_epochs,dice_score_epochs_)
+    
+    print('---------娱乐性质---------')
+    dice_score1,dice_score2,dice_score3,dice_score4 \
+        = validate(model,train_loader)
