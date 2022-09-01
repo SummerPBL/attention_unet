@@ -124,8 +124,8 @@ def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
     seg = sitk.ReadImage(NII_segpath)
     Label_array:np.ndarray = sitk.GetArrayFromImage(seg)
 
-    upper = 200
-    lower = -200
+    upper = 400
+    lower = -100
     CT_array[CT_array > upper] = upper
     CT_array[CT_array < lower] = lower
     
@@ -158,6 +158,9 @@ def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
     Label_array[Label_array > 0.5] = 1
 
     THRESHOLD :float =0.1
+
+    # 像素自适应 图像增强
+    clahe = cv2.createCLAHE(clipLimit = 4, tileGridSize=(10,5))
         
     for i in range(Label_array.shape[0]):
         label_select:np.ndarray = Label_array[i]
@@ -165,13 +168,14 @@ def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
             continue
         # print('某张2D:',label_select.shape) 256x256
 
-        # label_arr: 肝脏背景
-        # original_label: 肝脏 肿瘤 背景
-        # tumor_label: 肿瘤 背景
-        tumor_label=origin_label[i]
+        # label_arr: 肝脏背景, 只含01
+        # original_label: 肝脏 肿瘤 背景 只含012
+        # tumor_label: 肿瘤 背景, 只含02
+        tumor_label:np.ndarray=origin_label[i]
         tumor_label[tumor_label<1.5]=0
         tumor_label[tumor_label>=1.5]=1
-
+        if tumor_label.sum()==0:
+            continue
 
         # img: 肝脏之外的部分为0
         # raw_pic=Image.fromarray(CT_array[i]*label_select).convert('L')
@@ -179,7 +183,10 @@ def GetImFromNII(NII_impath:str, NII_segpath:str,output_dir:str)->None:
         
         raw_arr:np.ndarray
         label_arr:np.ndarray
-        raw_arr,label_arr=crop_square_zoom(CT_array[i]*label_select,256,tumor_label)
+        raw_pic=Image.fromarray(CT_array[i]).convert('L')
+        raw_pic_arr=np.uint8(raw_pic)
+        pic_clahe:np.ndarray=clahe.apply(raw_pic_arr)
+        raw_arr,label_arr=crop_square_zoom(pic_clahe*label_select,256,tumor_label)
         label_arr*=WHITE_VALUE
         
         print('Image数据结构:',raw_arr.shape,label_arr.shape)
@@ -207,13 +214,21 @@ if __name__ == '__main__':
     #     'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/label/segmentation-14.nii',\
     #     './tmp_dataset')
     
-    for i in range(47,131):
-        if(len(os.listdir('./tumor_dataset/train'))>=500*2):
+    for i in range(27,47):
+        if(len(os.listdir('./tmp_test'))>=600*2):
             break
         GetImFromNII(\
-            f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/ct/volume-{i}.nii',\
-            f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/label/segmentation-{i}.nii',\
-            './tumor_dataset/train')
+            f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/test/ct/volume-{i}.nii',\
+            f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/test/label/segmentation-{i}.nii',\
+            './tmp_test')
+    
+    # for i in range(47,130):
+    #     if(len(os.listdir('./tmp_dataset'))>=2000*2):
+    #         break
+    #     GetImFromNII(\
+    #         f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/ct/volume-{i}.nii',\
+    #         f'D:/microsoft_PBL/3DUNet-Pytorch/raw_dataset/train/label/segmentation-{i}.nii',\
+    #         './tmp_dataset')
     
     print('done')
 
