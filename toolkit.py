@@ -39,11 +39,11 @@ def log_statistics(\
         samples_per_epoch:int, \
         dice_loss_per_batches:List[float], \
         bce_loss_per_batches:Optional[List[float]]=None,\
-        mse_loss_per_batches:Optional[List[float]]=None, \
+        L1_loss_per_batches:Optional[List[float]]=None, \
             \
         dice_loss_per_epoch:Optional[List[float]]=None, \
         bce_loss_per_epoch:Optional[List[float]]=None, \
-        mse_loss_per_epoch:Optional[List[float]]=None, \
+        L1_loss_per_epoch:Optional[List[float]]=None, \
             \
         dice_scores_per_epoch:np.ndarray=None,\
         )->None:
@@ -85,10 +85,10 @@ def log_statistics(\
             linestyle='-', color='green', marker='8', linewidth=1.5,label='BCE')
         for x,y in zip(tmp_x_axis_per_batches,bce_loss_per_batches):
             axes.text(x,y,'%.2f'%y,ha='left',va='bottom')
-    if mse_loss_per_batches is not None:
-        axes.plot(tmp_x_axis_per_batches,mse_loss_per_batches,\
+    if L1_loss_per_batches is not None:
+        axes.plot(tmp_x_axis_per_batches,L1_loss_per_batches,\
             linestyle='-', color='orange', marker='p', linewidth=1.5,label='L1')
-        for x,y in zip(tmp_x_axis_per_batches,mse_loss_per_batches):
+        for x,y in zip(tmp_x_axis_per_batches,L1_loss_per_batches):
             axes.text(x,y,'%.2f'%y,ha='left',va='bottom')
     
     # 多条曲线标注
@@ -102,7 +102,7 @@ def log_statistics(\
         table_header=['epoch','dice loss',]
         if bce_loss_per_batches is not None:
             table_header.append('BCE loss')
-        if mse_loss_per_batches is not None:
+        if L1_loss_per_batches is not None:
             table_header.append('L1 loss')
         main_writer.writerow(table_header)
         for i in range(0,len(dice_loss_per_batches)):
@@ -111,8 +111,8 @@ def log_statistics(\
             tmp_row=[epoch,dice_loss,]
             if bce_loss_per_batches is not None:
                 tmp_row.append(bce_loss_per_batches[i])
-            if mse_loss_per_batches is not None:
-                tmp_row.append(mse_loss_per_batches[i])
+            if L1_loss_per_batches is not None:
+                tmp_row.append(L1_loss_per_batches[i])
             main_writer.writerow(tmp_row)
     
     print('losses in each batch done √')
@@ -146,10 +146,10 @@ def log_statistics(\
             linestyle='-', color='green', marker='8', linewidth=1.5,label='BCE')
         for x,y in zip(tmp_x_axis_per_epoch,bce_loss_per_epoch):
             axes.text(x,y,'%.4f'%y,ha='left',va='bottom')
-    if mse_loss_per_epoch is not None:
-        axes.plot(tmp_x_axis_per_epoch,mse_loss_per_epoch,\
+    if L1_loss_per_epoch is not None:
+        axes.plot(tmp_x_axis_per_epoch,L1_loss_per_epoch,\
             linestyle='-', color='orange', marker='p', linewidth=1.5,label='L1')
-        for x,y in zip(tmp_x_axis_per_epoch,mse_loss_per_epoch):
+        for x,y in zip(tmp_x_axis_per_epoch,L1_loss_per_epoch):
             axes.text(x,y,'%.4f'%y,ha='left',va='bottom')
 
     # 多条曲线标注
@@ -163,15 +163,15 @@ def log_statistics(\
         table_header=['epoch','dice loss',]
         if bce_loss_per_epoch is not None:
             table_header.append('BCE loss')
-        if mse_loss_per_epoch is not None:
+        if L1_loss_per_epoch is not None:
             table_header.append('L1 loss')
         main_writer.writerow(table_header)
         for i in range(0,len(dice_loss_per_epoch)):
             tmp_row=[i,dice_loss_per_epoch[i],]
             if bce_loss_per_epoch is not None:
                 tmp_row.append(bce_loss_per_epoch[i])
-            if mse_loss_per_epoch is not None:
-                tmp_row.append(mse_loss_per_epoch[i])
+            if L1_loss_per_epoch is not None:
+                tmp_row.append(L1_loss_per_epoch[i])
             main_writer.writerow(tmp_row)
     
     print('losses in each epoch done √')
@@ -233,15 +233,20 @@ def log_statistics(\
 
 
 if __name__ == '__main__':
-    dice_loss_per_batches=(1.5937461419539019,1.1031421422958374,0.5851144194602966,0.45622390508651733,0.2765046954154968,0.28186720609664917,0.24353008288325687,0.23502856492996216,0.22691103093551868,0.28186720609664917,0.2652295231819153,0.23502856492996216)
+    dice_loss_per_batches=(1.5937461419539019,1.1031421422958374,\
+        0.5851144194602966,0.45622390508651733,\
+        0.2765046954154968,0.28186720609664917,\
+        0.24353008288325687,0.23502856492996216,\
+        0.22691103093551868,0.28186720609664917,\
+        0.2652295231819153,0.23502856492996216)
     bce_loss_per_batches=np.array(dice_loss_per_batches)
     bce_loss_per_batches= bce_loss_per_batches**2+1
-    mse_loss_per_batches=np.cos(bce_loss_per_batches)
+    L1_loss_per_batches=np.cos(bce_loss_per_batches)
 
     dice_loss_per_epoch=dice_loss_per_batches[1::3]
     bce_loss_per_epoch=np.array(dice_loss_per_epoch)
     bce_loss_per_epoch=bce_loss_per_epoch**2+1
-    mse_loss_per_epoch=np.cos(bce_loss_per_epoch)
+    L1_loss_per_epoch=np.cos(bce_loss_per_epoch)
 
     dice_scores=np.array([
         [54,57,67,76,23],
@@ -252,6 +257,5 @@ if __name__ == '__main__':
     dice_scores=np.array(dice_scores)
 
 
-    log_statistics('./tmp_log',4,dice_loss_per_batches,bce_loss_per_batches,None,dice_loss_per_epoch,bce_loss_per_epoch,mse_loss_per_epoch,dice_scores)
-
-    # log_statistics('./tmp_log',4,dice_loss_per_batches,None,mse_loss_per_batches,dice_loss_per_epoch,bce_loss_per_epoch,None,None)
+    log_statistics('./tmp_log',4,dice_loss_per_batches,bce_loss_per_batches,None,\
+        dice_loss_per_epoch,bce_loss_per_epoch,L1_loss_per_epoch,dice_scores)
