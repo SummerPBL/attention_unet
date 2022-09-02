@@ -23,6 +23,8 @@ CONFIG_NUM_WORKERS = 0 if platform.system()=='Windows' else min(max(cpu_count()-
 
 BATCH_SIZE:np.int32=2
 
+SAMPLE_NUM_EPOCH=3
+
 DEBUG_MODE:bool=True
 
 print('-----------configuration-----------')
@@ -122,6 +124,8 @@ if __name__=='__main__':
     print(type(optimizer))
     print(type(train_loader))
 
+    modulus:int=int(np.ceil(len(train_loader)/SAMPLE_NUM_EPOCH))
+
     for epoch in range(20):
         bce_loss, dice_loss, total_loss=0.0, 0.0, 0.0
         total_count:int=0
@@ -140,7 +144,7 @@ if __name__=='__main__':
             dice_loss+=dice*labels.size(0)
             total_loss+=total*labels.size(0)
             total_count+=labels.size(0)
-            if i%100==0:
+            if i%modulus==0:
                 print('loss-- bce: {}, dice: {}, total: {}'.format(bce,dice, total))
             if(DEBUG_MODE==True):
                 break
@@ -152,7 +156,8 @@ if __name__=='__main__':
         dice_score4 = validate(model,val_loader)
         print('4th dice score: ',dice_score4)
 
-        torch.save(model.state_dict(),os.path.join(WEIGHTS_SAVE_DIR,'encoder_{}_level{}_{:d}.pth'.format(epoch,4,int(dice_score4*10000))))
+        torch.save(model.state_dict(),\
+            os.path.join(WEIGHTS_SAVE_DIR,'encoder_{}_level{}_{:04d}.pth'.format(epoch,4,int(dice_score4*10000))))
 
         if DEBUG_MODE==True:
             break

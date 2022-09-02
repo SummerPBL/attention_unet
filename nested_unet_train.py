@@ -63,7 +63,7 @@ if ref_model is not None:
 # loss functions
 L1_loss_func=torch.nn.SmoothL1Loss().to(CONFIG_DEVICE)
 
-optimizer=torch.optim.Adam(model.parameters())
+optimizer=torch.optim.Adam(model.parameters(),lr=2.5e-4)
 
 train_dataset=liverDataset('./dataset/train',None,None)
 
