@@ -87,7 +87,7 @@ def log_statistics(\
             axes.text(x,y,'%.2f'%y,ha='left',va='bottom')
     if mse_loss_per_batches is not None:
         axes.plot(tmp_x_axis_per_batches,mse_loss_per_batches,\
-            linestyle='-', color='orange', marker='p', linewidth=1.5,label='MSE')
+            linestyle='-', color='orange', marker='p', linewidth=1.5,label='L1')
         for x,y in zip(tmp_x_axis_per_batches,mse_loss_per_batches):
             axes.text(x,y,'%.2f'%y,ha='left',va='bottom')
     
@@ -103,7 +103,7 @@ def log_statistics(\
         if bce_loss_per_batches is not None:
             table_header.append('BCE loss')
         if mse_loss_per_batches is not None:
-            table_header.append('MSE loss')
+            table_header.append('L1 loss')
         main_writer.writerow(table_header)
         for i in range(0,len(dice_loss_per_batches)):
             epoch=tmp_x_axis_per_batches[i]
@@ -148,7 +148,7 @@ def log_statistics(\
             axes.text(x,y,'%.4f'%y,ha='left',va='bottom')
     if mse_loss_per_epoch is not None:
         axes.plot(tmp_x_axis_per_epoch,mse_loss_per_epoch,\
-            linestyle='-', color='orange', marker='p', linewidth=1.5,label='MSE')
+            linestyle='-', color='orange', marker='p', linewidth=1.5,label='L1')
         for x,y in zip(tmp_x_axis_per_epoch,mse_loss_per_epoch):
             axes.text(x,y,'%.4f'%y,ha='left',va='bottom')
 
@@ -164,7 +164,7 @@ def log_statistics(\
         if bce_loss_per_epoch is not None:
             table_header.append('BCE loss')
         if mse_loss_per_epoch is not None:
-            table_header.append('MSE loss')
+            table_header.append('L1 loss')
         main_writer.writerow(table_header)
         for i in range(0,len(dice_loss_per_epoch)):
             tmp_row=[i,dice_loss_per_epoch[i],]
