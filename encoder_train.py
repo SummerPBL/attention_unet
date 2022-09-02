@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from dataset import liverDataset
 import encoding_unetpp
-from dice_loss import binary_dice_loss,binary_dice_coeff
+from dice_loss import binary_dice_loss,binary_dice_coeff,weightedBCE
 import numpy as np
 import os
 import platform
@@ -34,10 +34,12 @@ print('-----------------------------------')
 model = encoding_unetpp.NestedUNet(1,1,)
 
 # loss functions
-bce_loss_func=torch.nn.BCELoss().to(CONFIG_DEVICE)
-mse_loss_func=torch.nn.MSELoss().to(CONFIG_DEVICE)
+"""
+No need to introduce.
+"""
 
-optimizer=torch.optim.Adam(model.parameters())
+
+optimizer=torch.optim.Adam(model.parameters(),lr=2.5e-4)
 
 train_dataset=liverDataset('./dataset/train',None,None)
 
@@ -45,7 +47,7 @@ train_loader=DataLoader(train_dataset,BATCH_SIZE,shuffle=True,num_workers=CONFIG
 
 val_dataset=liverDataset('./dataset/val',None,None)
 
-val_loader=DataLoader(val_dataset,BATCH_SIZE,shuffle=True,num_workers=CONFIG_NUM_WORKERS)
+val_loader=DataLoader(val_dataset,BATCH_SIZE,shuffle=False,num_workers=CONFIG_NUM_WORKERS)
 
 # exit()
 
@@ -68,7 +70,7 @@ def train_iteration(model:encoding_unetpp.NestedUNet, \
     bce:torch.Tensor=0
     dice:torch.Tensor=0
     for prediction in outputs:
-        bce+=bce_loss_func(prediction,labels)
+        bce+=weightedBCE(prediction,labels,0.8)
         dice+=binary_dice_loss(prediction,labels)
 
     total_loss:torch.Tensor= bce+dice
